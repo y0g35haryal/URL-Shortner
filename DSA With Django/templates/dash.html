@@ -1,0 +1,261 @@
+{% extends 'base.html'%}
+{% block title%}
+Dashboard - URL Shortener
+{% endblock title%}
+
+{% block body%}
+<div style="text-align: right; margin-bottom: 1rem;">
+    {% if is_verified %}
+    <h3><strong>Logged in as:</strong> {{ user_email }}</h3>
+    {% endif %}
+</div>
+
+<div class="min-vh-100 bg-light">
+    <!-- Email authentication overlay -->
+    {% if not is_verified %}
+    <div class="position-fixed top-0 start-0 w-100 h-100 bg-white d-flex align-items-center justify-content-center"
+        style="z-index: 1050;">
+        <div class="card border-0 shadow-lg" style="max-width: 400px; width: 90%;">
+            <div class="card-body p-5 text-center">
+                <div class="mb-4">
+                    <i class="bi bi-shield-lock display-4 text-dark"></i>
+                </div>
+                <h4 class="text-dark mb-3">Access Your Dashboard</h4>
+                <p class="text-muted mb-4">Enter your email to access your URL shortener dashboard</p>
+
+                <form method="POST" action='/dash' id="emailAuthForm">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <input type="email" name="verifyEmail" class="form-control form-control-lg"
+                            placeholder="Enter your email address" required>
+                    </div>
+                    <button type="submit" class="btn btn-dark btn-lg w-100">
+                        <i class="bi bi-arrow-right me-2"></i>Access Dashboard
+                    </button>
+                </form>
+
+                {% if error %}
+                <div class="alert alert-danger mt-3">
+                    <i class="bi bi-exclamation-triangle me-2"></i>{{ error }}
+                </div>
+                {% endif %}
+                <a href='/home'>Go to Home</a>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    
+    <div class="container py-5">
+        {% if is_searching %}
+        <!-- SEARCH RESULTS -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-search me-2"></i>
+                            Search Results for "{{ search_query }}"
+                            <span class="badge bg-light text-dark ms-2">{{ search_results|length }} found</span>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        {% if search_results %}
+                        <div class="list-group">
+                            {% for url in search_results %}
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1">{{ url.short_url }}</h6>
+                                        <p class="mb-1 text-muted small">{{ url.long_url }}</p>
+                                        <small class="text-muted">Hash: {{ url.url_hash }} | Created: {{ url.created_at|date:"Y-m-d H:i" }}</small>
+                                    </div>
+                                    <div class="btn-group ms-3">
+                                        <a href="/{{ url.short_url|cut:'shorten.ly/' }}" 
+                                           class="btn btn-sm btn-outline-primary" target="_blank">
+                                            <i class="bi bi-box-arrow-up-right"></i> Visit
+                                        </a>
+                                        <form method="POST" action="{% url 'delete_url' url.link_id %}" class="d-inline">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" 
+                                                    onclick="return confirm('Are you sure?')">
+                                                <i class="bi bi-trash"></i> Delete
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="text-center text-muted py-4">
+                            <i class="bi bi-search display-4"></i>
+                            <p class="mt-3">No URLs found matching "{{ search_query }}"</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <h2 class="mb-4 text-center">Shortened URLs</h2>
+        
+        {% if messages %}
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header bg-dark text-white">
+                        <h5 class="mb-0">URL Chain</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="list-group list-group-flush">
+                            {% for url in urls %}
+                            <div class="list-group-item d-flex flex-column">
+                                <strong>Original:</strong> 
+                                <span class="text-truncate">{{ url.long_url }}</span>
+                                <strong>Short:</strong> 
+                                <a href="/{{ url.short_url|cut:'shorten.ly/' }}" class="text-info" target="_blank">
+                                    {{ url.short_url }}
+                                </a>
+                                <small>Created: {{ url.created_at|date:"Y-m-d H:i" }}</small>
+                                <small>Position: {{ forloop.counter }}</small>
+                                <div class="mt-2 d-flex gap-2">
+                                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" 
+                                            data-bs-target="#editModal{{ url.link_id }}">
+                                        Edit
+                                    </button>
+                                    <form method="POST" action="{% url 'delete_url' url.link_id %}">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-danger" 
+                                                onclick="return confirm('Are you sure you want to delete this URL?')">
+                                            Delete
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <!-- Edit Modal -->
+                            <div class="modal fade" id="editModal{{ url.link_id }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">Edit URL</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <form method="POST" action="{% url 'edit_url' url.link_id %}">
+                                            {% csrf_token %}
+                                            <div class="modal-body">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Long URL</label>
+                                                    <input type="url" name="long_url" class="form-control" 
+                                                           value="{{ url.long_url }}" required>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-primary">Save Changes</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% empty %}
+                            <div class="list-group-item text-center text-muted">
+                                No URLs found for this email.
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Add New URL</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST">
+                            {% csrf_token %}
+                            <input type="hidden" name="user_email" value="{{ user_email }}">
+                            
+                            <div class="mb-3">
+                                <label for="long_url" class="form-label">URL to Shorten</label>
+                                <input type="url" class="form-control" id="long_url" name="long_url" 
+                                       placeholder="https://example.com" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="insertion_point" class="form-label">Insertion Point</label>
+                                <select class="form-select" id="insertion_point" name="insertion_point" 
+                                        onchange="toggleAfterOptions()">
+                                    <option value="head">Insert at Head</option>
+                                    <option value="tail" selected>Insert at Tail</option>
+                                    <option value="after">Insert After Specific URL</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3" id="after_options_container" style="display: none;">
+                                <label for="insert_after" class="form-label">Insert After Which URL?</label>
+                                <select class="form-select" id="insert_after" name="insert_after">
+                                    {% for url in urls %}
+                                    <option value="{{ url.link_id }}">{{ url.short_url }} ({{ url.long_url|truncatewords:3 }})</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary">Create Short URL</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card mt-4">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">SLL Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Total URLs in SLL:</strong> {{ urls|length }}</p>
+                        <p><strong>SLL Structure:</strong></p>
+                        <div class="bg-dark text-white p-3 rounded">
+                            <code>
+                                {% for url in urls %}
+                                [{{ url.short_url }}]{% if not forloop.last %} → {% endif %}
+                                {% empty %}
+                                Empty List
+                                {% endfor %}
+                            </code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function toggleAfterOptions() {
+    const insertionPoint = document.getElementById('insertion_point').value;
+    const afterOptions = document.getElementById('after_options_container');
+    
+    if (insertionPoint === 'after') {
+        afterOptions.style.display = 'block';
+    } else {
+        afterOptions.style.display = 'none';
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    toggleAfterOptions();
+});
+</script>
+{% endblock body %}
